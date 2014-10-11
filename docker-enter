@@ -1,0 +1,4 @@
+#!/bin/bash
+p=$(docker inspect --format '{{.State.Pid}}' "$1")
+shift
+nsenter --target $p --mount --uts --ipc --net --pid -- "$@";

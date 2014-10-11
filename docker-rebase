@@ -1,0 +1,71 @@
+#!/bin/bash
+# This is an alternative to docker commit that will create a new image
+# without history.  Rebuilding the Dockerfile from an existing container is
+# tricky.  Currently the CMD is not parsed correctly, but it is probably close
+# enough to work with most containers.  There are probably other errors as
+# as well, as docker history is an in-precise way to learn the original 
+# docker commands.
+
+if [ -z "$1" -o -z "$2" ]
+then
+  echo "$0 CONTAINER REPOSITORY[:TAG]" 1>&2
+  echo " "
+  echo "$0 is an alternative to docker commit to create new image without"
+  echo "all the revision history."
+  exit 1
+fi
+
+# This is a sad story.  Since a container name and an image name can be the
+# same we have to use docker ps to find the container id.   That is not as easy
+# as it seems if you want to be "fool proof".
+
+re=$((docker ps -a -q --no-trunc --before="$1" ;docker ps -a -q --no-trunc --since="$1")|sort -u|tr '\n' '|')
+containerId=$(docker ps --no-trunc -a -q | egrep -v "^($re)\$")
+imageId=$(docker inspect --format '{{.Image}}' "$containerId")
+
+if [ -n "$imageId" ]
+then
+  echo "Exporting and importing the container to a new image"
+  from=$(docker export "$containerId" | docker import -)
+  echo " ---> $from"
+  if [ -z "$from" ]
+  then 
+    echo "Failed to export and import $containerId" 1>&2
+    exit 1
+  fi
+  # Inspect the existing image to create a Dockerfile
+  (
+    echo "From $from"
+    (
+      docker history --no-trunc "$imageId" | \
+      sed -n -e 's,.*/bin/sh -c #(nop) \(MAINTAINER .*[^ ]\) *0 B,\1,p'
+    )
+    (
+      format='{{range $e := .Config.Env}}
+ENV {{$e}}
+{{end}}{{range $e,$v := .Config.ExposedPorts}}
+EXPOSE {{$e}}
+{{end}}{{range $e,$v := .Config.Volumes}}
+VOLUME {{$e}}
+{{end}}{{with .Config.User}}USER {{.}} {{end}}
+{{with .Config.WorkingDir}}WORKDIR {{.}} {{end}}
+{{with .Config.Entrypoint}}ENTRYPOINT [{{range $e := .}}"{{$e}}",{{end}}]{{end}}
+{{with .Config.Cmd}}CMD [{{range $e := .}}"{{$e}}",{{end}}]{{end}}
+{{with .Config.OnBuild}}ONBUILD {{.}} {{end}}'
+
+      docker inspect --format="$format" "$imageId" | \
+      sed -e 's,^\(ENV [^=]*\)=,\1 ,' \
+        -e 's,^\(EXPOSE [0-9]*\)/tcp,\1,' \
+        -e 's,^\(ENTRYPOINT .*\)\,\]$,\1],' \
+        -e 's,^\(CMD.*\)\,\]$,\1],'
+    )
+  ) | docker build --force-rm -t "$2" -
+  status=$?
+  # We only successfully remove the image if the build failed.
+  docker rmi "$from" 2>>/dev/null
+  exit $status
+else
+    echo "Failed to to find image id" 1>&2
+    exit 1
+fi
+
