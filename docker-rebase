@@ -54,7 +54,8 @@ then
     echo "From $from"
     (
       docker history --no-trunc "$imageId" | \
-      sed -n -e 's,.*/bin/sh -c #(nop) \(MAINTAINER .*[^ ]\) *0 B,\1,p'
+      sed -n -e 's,.*/bin/sh -c #(nop) \(MAINTAINER .*[^ ]\) *0 B,\1,p' | \
+      head -1
     )
     (
       format='{{range $e := .Config.Env}}
