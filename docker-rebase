@@ -63,17 +63,15 @@ ENV {{$e}}
 EXPOSE {{$e}}
 {{end}}{{range $e,$v := .Config.Volumes}}
 VOLUME {{$e}}
-{{end}}{{with .Config.User}}USER {{.}} {{end}}
-{{with .Config.WorkingDir}}WORKDIR {{.}} {{end}}
-{{with .Config.Entrypoint}}ENTRYPOINT [{{range $e := .}}"{{$e}}",{{end}}]{{end}}
-{{with .Config.Cmd}}CMD [{{range $e := .}}"{{$e}}",{{end}}]{{end}}
-{{with .Config.OnBuild}}ONBUILD {{.}} {{end}}'
+{{end}}{{with .Config.User}}USER {{.}}{{end}}
+{{with .Config.WorkingDir}}WORKDIR {{.}}{{end}}
+{{with .Config.Entrypoint}}ENTRYPOINT {{json .}}{{end}}
+{{with .Config.Cmd}}CMD {{json .}}{{end}}
+{{with .Config.OnBuild}}ONBUILD {{json .}}{{end}}'
 
       docker inspect --format="$format" "$imageId" | \
       sed -e 's,^\(ENV [^=]*\)=,\1 ,' \
-        -e 's,^\(EXPOSE [0-9]*\)/tcp,\1,' \
-        -e 's,^\(ENTRYPOINT .*\)\,\]$,\1],' \
-        -e 's,^\(CMD.*\)\,\]$,\1],'
+        -e 's,^\(EXPOSE [0-9]*\)/tcp,\1,'
     )
   ) | docker build --force-rm -t "$2" -
   status=$?
