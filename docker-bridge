@@ -1,0 +1,123 @@
+#!/bin/bash
+# Script to connect a container to a bridge
+# Copyright (C) 2014 docbill@gmail.com
+
+#   This program is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#   (at your option) any later version.
+#
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+# 
+#   You should have received a copy of the GNU General Public License
+#   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# set meaningful defaults
+CONTAINER="$1"
+shift
+
+needUsage=0
+while [ $# -gt 0 ]
+do
+  case "$1" in
+    [Aa][Dd][Dd]* )
+      shift
+      ADDR="$1"
+      ;;
+    [Bb][Rr][Ii]* )
+      shift
+      BRIDGE="$1"
+      ;;
+    [Bb][Rr][Oo]* )
+      shift
+      BROADCAST="$1"
+      ;;
+    [Gg][Aa][Tt]* )
+      shift
+      GATEWAY="$1"
+      ;;
+    *)
+      needUsage=1
+      echo "Unrecognized option '$1'" 1>&2
+      ;;
+  esac
+  shift
+done
+if [ $needUsage -eq 0 ]
+then
+  if [ -z "$CONTAINER" ]
+  then 
+    needUsage=1
+    echo "Unknown container" 1>&2
+  elif [ -z "$ADDR" ]
+  then 
+    needUsage=1
+    echo "Unknown address" 1>&2
+  elif [ -z "$BROADCAST" ]
+  then 
+    needUsage=1
+    echo "Unknown broadcast" 1>&2
+  elif [ -z "$BRIDGE" ]
+  then 
+    needUsage=1
+    echo "Unknown bridge" 1>&2
+  elif [ -z "$GATEWAY" ]
+  then 
+    needUsage=1
+    echo "Unknown gateway" 1>&2
+  fi
+fi
+if [ $needUsage -eq 1 ]
+then
+  echo "Usage: "\""$0"\"" <CONTAINER> add[ress] <ADDRESS> bri[dge] <BRIDGE>\\ " 1>&2
+  echo "  [ctl <ovs-vsctl|brctl>] bro[adcast] <BROADCAST> gat[eway] <GATEWAY>" 1>&2
+  echo " " 1>&2
+  echo "Configures a container internet to use a bridge." 1>&2
+  echo "e.g. " 1>&2
+  echo \""$0"\"" mycontainer address 172.31.253.210/22 bridge br0 \\ " 1>&2
+  echo "  ctl ovs-vsctl broadcast 172.31.255.255 gateway 172.31.253.1" 1>&2
+  echo " " 1>&2
+  echo "-or- " 1>&2
+  echo \""$0"\"" mycontainer add 172.31.253.210/22 bri br0 \\ " 1>&2
+  echo "  ctl ovs-vsctl bro 172.31.255.255 gat 172.31.253.1" 1>&2
+  
+  exit 1
+fi
+
+set -e
+re=$((docker ps -a -q --no-trunc --before="$CONTAINER" ;docker ps -a -q --no-trunc --since="$CONTAINER")| sort -u | tr '\n' '|' )
+CONTAINER_ID=$(docker ps --no-trunc -q -a | egrep -v "^($re)\$")
+if [ -z "$CONTAINER_ID" ]
+then
+  exit 1
+fi
+NSPID=$(find /sys/fs/cgroup/devices -name docker-$CONTAINER_ID.scope -exec head -1  {}/tasks \; |head -1)
+if [ -z $NSPID ]
+then
+  echo "Failed to find process for $CONTAINER_ID" 1>&2
+  exit 1
+fi
+[ -d /var/run/netns ] || mkdir -p /var/run/netns
+set -e
+ln -sf /proc/$NSPID/ns/net /var/run/netns/$NSPID
+ip link add name vethL$NSPID type veth peer name vethG$NSPID
+ip link set vethL$NSPID up
+ip link set vethG$NSPID netns $NSPID
+if ( ovs-vsctl br-exists "$BRIDGE" 2>>/dev/null )
+then
+  ovs-vsctl add-port "$BRIDGE" vethL$NSPID
+else
+  brctl addif "$BRIDGE" vethL$NSPID
+fi
+ip netns exec $NSPID ip link set vethG$NSPID name eth0
+ip netns exec $NSPID ip addr add "$ADDR" broadcast "$BROADCAST" dev eth0
+ip netns exec $NSPID ip link set eth0 up
+ip netns exec $NSPID ip link set lo up
+ip netns exec $NSPID ip route add default via "$GATEWAY"
+set +e
+ip netns exec $NSPID ip addr add 127.0.0.1/8 dev lo 2>>/dev/null
+ip netns exec $NSPID ip link set lo up 2>>/dev/null
+
