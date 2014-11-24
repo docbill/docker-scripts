@@ -29,7 +29,7 @@ EXAMPLE: Creating a bridge accessible on the local network.
 
   Finally connect your container to your bridge with a static ip address. 
 
-  # docker-bridge "$CONTAINER" address 192.168.1.68/24 bridge br0 broadcast 192.168.0.255 gateway 192.168.1.1
+  # docker-bridge "$CONTAINER" address 192.168.1.68/24 bridge br0 broadcast 192.168.1.255 gateway 192.168.1.1
 
   In this example, my router is 192.168.1.1.  The static IP address I assigned
   to the container is 192.168.1.68.
