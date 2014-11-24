@@ -115,7 +115,6 @@ fi
 ip netns exec $NSPID ip link set vethG$NSPID name eth0
 ip netns exec $NSPID ip addr add "$ADDR" broadcast "$BROADCAST" dev eth0
 ip netns exec $NSPID ip link set eth0 up
-ip netns exec $NSPID ip link set lo up
 ip netns exec $NSPID ip route add default via "$GATEWAY"
 set +e
 ip netns exec $NSPID ip addr add 127.0.0.1/8 dev lo 2>>/dev/null
