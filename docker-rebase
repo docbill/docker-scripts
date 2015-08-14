@@ -72,7 +72,8 @@ VOLUME {{$e}}
 
       docker inspect --format="$format" "$imageId" | \
       sed -e 's,^\(ENV [^=]*\)=,\1 ,' \
-        -e 's,^\(EXPOSE [0-9]*\)/tcp,\1,'
+        -e 's,^\(EXPOSE [0-9]*\)/tcp,\1,' | \
+      awk '{if (tolower($1) ~/env/) {v=$3;for(i=4;i<=NF;i++){v=v"\\ "$i};E[$2]=v} else print} END {r="ENV ";for (i in E) r=r" "i"="E[i];print r}'
     )
   ) | docker build --force-rm -t "$2" -
   status=$?
