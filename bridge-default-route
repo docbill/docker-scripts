@@ -79,7 +79,7 @@ then
   echo "Usage: "\""$0"\"" <BRIDGE> [ctl <brctl|ovs-vsctl>] [gateway <GATEWAY>] \\ " 1>&2
   echo "  [metric <METRIC>] [dev <INTEFACE>]" 1>&2
   echo " " 1>&2
-  echo "Creates a new bridge and routes the netwokr through that bridge." 1>&2
+  echo "Creates a new bridge and routes the network through that bridge." 1>&2
   echo "e.g. " 1>&2
   echo \""$0"\"" br0 ctl ovs-vsctl gateway 172.31.253.1 metric 1 dev em1" 1>&2
   exit 1
